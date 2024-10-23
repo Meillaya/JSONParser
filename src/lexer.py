@@ -28,6 +28,56 @@ class LexerError(Exception):
         self.line = line
         self.column = column
 
+def parse_string(input_string: str, i: int, line: int, column: int) -> tuple[str, int, int]:
+    value = ''
+    start_column = column
+    i += 1  # Skip opening quote
+    
+    while i < len(input_string):
+        char = input_string[i]
+        
+        if char == '"':
+            i += 1
+            return value, i, column + 1
+            
+        if char == '\\':
+            i += 1
+            if i >= len(input_string):
+                raise LexerError("Unterminated string literal", line, start_column)
+                
+            escape_char = input_string[i]
+            escape_sequences = {
+                '"': '"',
+                '\\': '\\',
+                '/': '/',
+                'b': '\b',
+                'f': '\f',
+                'n': '\n',
+                'r': '\r',
+                't': '\t'
+            }
+            
+            if escape_char in escape_sequences:
+                value += escape_sequences[escape_char]
+                column += 2  # Count both backslash and escape char
+            elif escape_char == 'u':
+                if i + 4 >= len(input_string):
+                    raise LexerError("Invalid Unicode escape sequence", line, column)
+                hex_str = input_string[i+1:i+5]
+                if not all(c in '0123456789abcdefABCDEF' for c in hex_str):
+                    raise LexerError(f"Invalid Unicode escape character: {hex_str}", line, column)
+                value += chr(int(hex_str, 16))
+                i += 4
+                column += 6  # Count \u plus 4 hex digits
+            else:
+                raise LexerError(f"Invalid escape character: \\{escape_char}", line, column)
+        else:
+            value += char
+            column += 1
+        i += 1
+    
+    raise LexerError("Unterminated string literal", line, start_column)
+    
 def lex(input_string: str) -> List[Token]:
     tokens = []
     i = 0
@@ -52,12 +102,7 @@ def lex(input_string: str) -> List[Token]:
         char = peek()
 
         # Skip whitespace
-        if char in ' \t\r':
-            advance()
-            continue
-        if char == '\n':
-            line += 1
-            column = 1
+        if char.isspace():
             advance()
             continue
 
@@ -78,47 +123,50 @@ def lex(input_string: str) -> List[Token]:
         # Strings
         if char == '"':
             start_line, start_column = line, column
-            advance()
             string_value = ''
-            while i < length:
-                c = peek()
-                if c == '"':
-                    advance()
-                    break
-                if c == '\\':
+            advance()  # Skip opening quote
+            
+            while i < length and peek() != '"':
+                if peek() == '\\':
                     advance()
                     if i >= length:
-                        raise LexerError("Unterminated string literal", line, column)
+                        raise LexerError("Unterminated string", start_line, start_column)
+                    
                     escape_char = peek()
-                    escape_sequences = {
-                        '"': '"', '\\': '\\', '/': '/', 'b': '\b',
-                        'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'
+                    escape_map = {
+                        '"': '"',
+                        '\\': '\\',
+                        '/': '/',
+                        'b': '\b',
+                        'f': '\f',
+                        'n': '\n',
+                        'r': '\r',
+                        't': '\t'
                     }
-                    if escape_char in escape_sequences:
-                        string_value += escape_sequences[escape_char]
+                    
+                    if escape_char in escape_map:
+                        string_value += escape_map[escape_char]
                         advance()
                     elif escape_char == 'u':
-                        unicode_value = 0
-                        advance()  # Move past 'u'
+                        advance()
                         hex_str = ''
                         for _ in range(4):
-                            if i >= length:
-                                raise LexerError("Unterminated Unicode escape", line, column)
-                            hex_digit = peek()
-                            if not re.match(r'[0-9a-fA-F]', hex_digit):
-                                raise LexerError(f"Invalid Unicode escape character: {hex_digit}", line, column)
-                            hex_str += hex_digit
+                            if i >= length or peek() not in '0123456789abcdefABCDEF':
+                                raise LexerError("Invalid Unicode escape sequence", line, column)
+                            hex_str += peek()
                             advance()
                         string_value += chr(int(hex_str, 16))
                     else:
                         raise LexerError(f"Invalid escape character: \\{escape_char}", line, column)
-                elif ord(c) < 0x20:
-                    raise LexerError("Invalid control character in string", line, column)
+                elif ord(peek()) < 0x20:
+                    raise LexerError("Control characters not allowed in strings", line, column)
                 else:
-                    string_value += c
+                    string_value += peek()
                     advance()
-            else:
-                raise LexerError("Unterminated string literal", start_line, start_column)
+            
+            if i >= length:
+                raise LexerError("Unterminated string", start_line, start_column)
+            advance()  # Skip closing quote
             tokens.append(Token('STRING', string_value, start_line, start_column))
             continue
 
@@ -126,64 +174,69 @@ def lex(input_string: str) -> List[Token]:
         if char == '-' or char.isdigit():
             start_line, start_column = line, column
             num_str = ''
+            
             if char == '-':
-                num_str += '-'
+                num_str += char
                 advance()
-                if i >= length or not peek().isdigit():
-                    raise LexerError("Invalid number format", line, column)
+                if not peek().isdigit():
+                    raise LexerError("Invalid number format", start_line, start_column)
+            
             if peek() == '0':
-                num_str += '0'
+                num_str += peek()
                 advance()
-                if i < length and peek().isdigit():
-                    raise LexerError("Numbers cannot have leading zeros", line, column)
+                if peek().isdigit():
+                    raise LexerError("Numbers cannot have leading zeros", start_line, start_column)
             else:
                 while i < length and peek().isdigit():
                     num_str += peek()
                     advance()
-            if i < length and peek() == '.':
-                num_str += '.'
-                advance()
-                if i >= length or not peek().isdigit():
-                    raise LexerError("Invalid number format after decimal point", line, column)
-                while i < length and peek().isdigit():
-                    num_str += peek()
-                    advance()
-            if i < length and peek() in ('e', 'E'):
+            
+            if peek() == '.':
                 num_str += peek()
                 advance()
-                if i < length and peek() in ('+', '-'):
-                    num_str += peek()
-                    advance()
-                if i >= length or not peek().isdigit():
-                    raise LexerError("Invalid exponent format", line, column)
+                if not peek().isdigit():
+                    raise LexerError("Invalid number format", start_line, start_column)
                 while i < length and peek().isdigit():
                     num_str += peek()
                     advance()
+            
+            if peek() in 'eE':
+                num_str += peek()
+                advance()
+                if peek() in '+-':
+                    num_str += peek()
+                    advance()
+                if not peek().isdigit():
+                    raise LexerError("Invalid number format", start_line, start_column)
+                while i < length and peek().isdigit():
+                    num_str += peek()
+                    advance()
+            
             tokens.append(Token('NUMBER', num_str, start_line, start_column))
             continue
 
-        # Literals: true, false, null
+        # Literals
         literals = {
-        'true': 'BOOLEAN', 
-        'false': 'BOOLEAN', 
-        'null': 'NULL'
+            'true': 'BOOLEAN',
+            'false': 'BOOLEAN',
+            'null': 'NULL'
         }
-    
+        
+        matched = False
         for literal, token_type in literals.items():
-            if input_string.startswith(literal, i):
+            if input_string[i:].startswith(literal):
                 tokens.append(Token(token_type, literal, line, column))
                 for _ in range(len(literal)):
                     advance()
+                matched = True
                 break
-        else:
-            # Check for invalid identifiers
-            if char.isalpha():
-                identifier = ''
-                while i < length and (peek().isalnum() or peek() == '_'):
-                    identifier += peek()
-                    advance()
-                raise LexerError(f"Invalid identifier: {identifier}", line, column)
-            raise LexerError(f"Unexpected character: {char}", line, column)
+        
+        if matched:
+            continue
+
+        raise LexerError(f"Unexpected character: {char}", line, column)
 
     tokens.append(Token('EOF', '', line, column))
     return tokens
+
+
