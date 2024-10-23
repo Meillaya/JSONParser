@@ -4,6 +4,13 @@
 
 This project implements a custom JSON parser in Python. It provides a robust, efficient, and extensible solution for parsing JSON data, with a focus on readability and maintainability.
 
+- Lexical analysis to tokenize JSON input
+- Recursive descent parser to build an AST
+- Pretty printing capabilities
+- Support for all standard JSON data types
+- Error handling with descriptive messages
+- (TODO) Customizable extensions for additional data types
+
 ## Features
 
 - **Lexical Analysis**: Tokenizes JSON input strings into a sequence of meaningful tokens.
@@ -22,7 +29,7 @@ To install the JSON parser, follow these steps:
 
 ``` python
    git clone https://github.com/Meillaya/JSONParser.git 
-   cd json-parser
+   cd JSONParser
 ```
 
 2. (Optional) Create and activate a virtual environment:
@@ -36,5 +43,55 @@ To install the JSON parser, follow these steps:
 
 ```python
    pip install -r requirements.txt
+```
+
+4. Install the project in development mode:
+
+```python
+pip install -e .
+```
+
+## Usage
+
+Basic usage:
+
+``` python
+jsonparse input.json
+```
+
+Pretty print output:
+
+``` python
+
+jsonparse --pretty input.json
+
+```
+
+Read from stdin: 
+
+``` bash
+echo '{"key": "value"}' | jsonparse
+```
+
+## Examples
+
+``` python
+jsonparse data.json
+```
+
+Pretty print with indentation:
+
+``` python
+jsonparse --pretty config.json
+```
+
+
+## Error Handling
+
+The parser provides clear error messages when encountering invalid JSON:
+
+``` python
+jsonparse invalid.json
+Error: Invalid syntax at line 3
 ```
 

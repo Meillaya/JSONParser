@@ -6,7 +6,7 @@ setup(
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'jsonparse=src.cli:main',
+            'jsonparse=src:main',
         ],
     },
     python_requires='>=3.7',
