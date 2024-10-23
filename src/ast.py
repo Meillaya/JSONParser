@@ -3,30 +3,47 @@ import json
 from typing import Any, Dict, List, Union
 
 class ASTNode:
-    pass
+    def evaluate(self) -> Any:
+        raise NotImplementedError
 
 class ObjectNode(ASTNode):
     def __init__(self, pairs: Dict[str, ASTNode]):
         self.pairs = pairs
 
+    def evaluate(self) -> Dict:
+        return {key: value.evaluate() for key, value in self.pairs.items()}
+
 class ArrayNode(ASTNode):
     def __init__(self, elements: List[ASTNode]):
         self.elements = elements
+
+    def evaluate(self) -> List:
+        return [element.evaluate() for element in self.elements]
 
 class StringNode(ASTNode):
     def __init__(self, value: str):
         self.value = value
 
+    def evaluate(self) -> str:
+        return self.value
+
 class NumberNode(ASTNode):
     def __init__(self, value: Union[int, float]):
         self.value = value
+
+    def evaluate(self) -> Union[int, float]:
+        return self.value
 
 class BooleanNode(ASTNode):
     def __init__(self, value: bool):
         self.value = value
 
+    def evaluate(self) -> bool:
+        return self.value
+
 class NullNode(ASTNode):
-    pass
+    def evaluate(self) -> None:
+        return None
 
 def parse_json(json_string: str) -> ASTNode:
     def parse_value(value: Any) -> ASTNode:

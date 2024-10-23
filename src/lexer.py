@@ -99,15 +99,17 @@ def lex(input_string: str) -> List[Token]:
                         advance()
                     elif escape_char == 'u':
                         unicode_value = 0
+                        advance()  # Move past 'u'
+                        hex_str = ''
                         for _ in range(4):
-                            advance()
                             if i >= length:
                                 raise LexerError("Unterminated Unicode escape", line, column)
                             hex_digit = peek()
                             if not re.match(r'[0-9a-fA-F]', hex_digit):
                                 raise LexerError(f"Invalid Unicode escape character: {hex_digit}", line, column)
-                            unicode_value = (unicode_value << 4) + int(hex_digit, 16)
-                        string_value += chr(unicode_value)
+                            hex_str += hex_digit
+                            advance()
+                        string_value += chr(int(hex_str, 16))
                     else:
                         raise LexerError(f"Invalid escape character: \\{escape_char}", line, column)
                 elif ord(c) < 0x20:
@@ -161,7 +163,12 @@ def lex(input_string: str) -> List[Token]:
             continue
 
         # Literals: true, false, null
-        literals = {'true': 'BOOLEAN', 'false': 'BOOLEAN', 'null': 'NULL'}
+        literals = {
+        'true': 'BOOLEAN', 
+        'false': 'BOOLEAN', 
+        'null': 'NULL'
+        }
+    
         for literal, token_type in literals.items():
             if input_string.startswith(literal, i):
                 tokens.append(Token(token_type, literal, line, column))
@@ -169,6 +176,13 @@ def lex(input_string: str) -> List[Token]:
                     advance()
                 break
         else:
+            # Check for invalid identifiers
+            if char.isalpha():
+                identifier = ''
+                while i < length and (peek().isalnum() or peek() == '_'):
+                    identifier += peek()
+                    advance()
+                raise LexerError(f"Invalid identifier: {identifier}", line, column)
             raise LexerError(f"Unexpected character: {char}", line, column)
 
     tokens.append(Token('EOF', '', line, column))
